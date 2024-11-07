@@ -4,8 +4,33 @@ local key = GetModConfigData("KEY")
 local highspeed_mode = GetModConfigData("highspeed_mode")
 
 local function DebugPrint(debug_string)
-    if not TUNING.DEBUG_MODE then return end
-    print('[DEBUG]'..debug_string)
+  --if not TUNING.DEBUG_MODE then return end
+  -- print('[DEBUG]'..debug_string)
+  if _G.ThePlayer.components.talker then
+    _G.ThePlayer.components.talker:Say(debug_string)
+  end
+end
+
+-- 从玩家身上拿取物品到鼠标
+function GetNewActiveItem(prefab)    
+  if not prefab or _G.ThePlayer.replica.inventory:GetActiveItem() then
+    DebugPrint("鼠标上有东西了，取消投壶")
+    return
+  end
+  local inventory = _G.ThePlayer.replica.inventory
+  local body_item = inventory:GetEquippedItem(_G.EQUIPSLOTS.BODY)
+  local back_item = inventory:GetEquippedItem(_G.EQUIPSLOTS.BACK)
+  local backpack = (back_item and back_item.replica.container) or
+  (body_item and body_item.replica.container)
+
+  for _, inv in pairs(backpack and { inventory, backpack } or { inventory }) do
+    for slot, item in pairs(inv:GetItems()) do
+      if item and item.prefab == prefab then
+        inv:TakeActiveItemFromAllOfSlot(slot)
+        return item
+      end
+    end
+  end
 end
 
 local function gzlazy_get_backpack()
@@ -324,7 +349,8 @@ AddClassPostConstruct("widgets/controls", function(self)
                                 GLOBAL.Sleep(highspeed_mode and 0.1 or 0.3)
                                 GLOBAL.SendRPCToServer(GLOBAL.RPC.LeftClick, lmb.action.code, now_pond_position.x, now_pond_position.z, now_pond, false, controlmods, false, lmb.action.mod_name)
                             -- 超过半天还没上钩，代表已经没鱼了
-                            elseif _G.TheWorld.state.cycles + _G.TheWorld.state.time - gzlazy_now_time >= 0.2 then
+                            -- elseif _G.TheWorld.state.cycles + _G.TheWorld.state.time - gzlazy_now_time >= 0.2 then
+                            elseif _G.TheWorld.state.cycles + _G.TheWorld.state.time - gzlazy_now_time >= 0.05 then
                                 DebugPrint("鱼塘没鱼")
                                 gzlazy_reel_count = gzlazy_reel_count + 1
                                 if #gzlazy_fishing_ponds == 1 then
@@ -333,6 +359,22 @@ AddClassPostConstruct("widgets/controls", function(self)
                                     GLOBAL.Sleep(highspeed_mode and 0.1 or 0.5)
                                     GLOBAL.SendRPCToServer(GLOBAL.RPC.LeftClick, lmb.action.code, now_pond_position.x, now_pond_position.z, now_pond, false, controlmods, false, lmb.action.mod_name)
                                 else
+                                    if now_pond.prefab == "medal_seapond" then
+                                        -- 投壶
+                                        DebugPrint("执行投壶操作")
+                                        if GetNewActiveItem("barnacle") then
+                                            GLOBAL.Sleep(0.5)
+                                            DebugPrint("尝试投壶")
+                                            local act = _G.BufferedAction(_G.ThePlayer, now_pond, _G.ACTIONS.PLACECHUM)
+                                            GLOBAL.SendRPCToServer(GLOBAL.RPC.LeftClick, act.action.code, now_pond_position.x, now_pond_position.z, now_pond, false, controlmods, false, act.action.mod_name)
+                                            GLOBAL.Sleep(0.5)
+                                            -- 放回藤壶
+                                            GLOBAL.SendRPCToServer(GLOBAL.RPC.ReturnActiveItem)
+                                        else
+                                            DebugPrint("没找到藤壶，记得带点藤壶")
+                                        end
+                                    end
+                                    GLOBAL.Sleep(0.5)
                                     DebugPrint("切换鱼塘")
                                     gzlazy_pond_index = gzlazy_pond_index + 1
                                     if gzlazy_pond_index > #gzlazy_fishing_ponds then
